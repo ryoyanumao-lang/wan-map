@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>わんマップ - ペット同伴可能施設マップ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#FF6B35;--primary-dark:#E55A2B;--primary-light:#FFF0E8;--accent:#4ECDC4;--bg:#FAFAFA;--card-bg:#FFF;--text:#333;--text-light:#777;--border:#E0E0E0;--shadow:0 2px 12px rgba(0,0,0,.1);--radius:12px}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh}
+
+.header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;z-index:1000;position:relative;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header-logo{display:flex;align-items:center;gap:10px}
+.header-logo .logo-icon{font-size:28px}
+.header-logo h1{font-size:20px;font-weight:700;letter-spacing:1px}
+.header-logo .subtitle{font-size:11px;opacity:.85}
+.header-stats{display:flex;gap:16px;font-size:12px;opacity:.9}
+.header-stats span{background:rgba(255,255,255,.2);padding:4px 10px;border-radius:20px}
+
+.main-container{display:flex;height:calc(100vh - 56px)}
+
+.sidebar{width:380px;background:var(--card-bg);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:500;transition:transform .3s}
+.sidebar.collapsed{transform:translateX(-380px);position:absolute}
+.sidebar-toggle{display:none;position:absolute;top:10px;left:10px;z-index:600;background:var(--card-bg);border:none;border-radius:8px;padding:8px 12px;box-shadow:var(--shadow);cursor:pointer;font-size:18px}
+
+.search-section{padding:14px;border-bottom:1px solid var(--border)}
+.search-box{display:flex;gap:8px}
+.search-box input{flex:1;padding:10px 14px;border:2px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;transition:border-color .2s}
+.search-box input:focus{border-color:var(--primary)}
+.search-box button{padding:10px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-family:inherit;white-space:nowrap}
+.search-box button:hover{background:var(--primary-dark)}
+
+.area-section{padding:10px 14px;border-bottom:1px solid var(--border)}
+.area-section h3{font-size:12px;color:var(--text-light);margin-bottom:8px;font-weight:500}
+.area-buttons{display:flex;flex-wrap:wrap;gap:5px}
+.area-btn{padding:4px 10px;border:1px solid var(--border);border-radius:14px;background:#fff;cursor:pointer;font-size:11px;font-family:inherit;transition:all .2s;color:var(--text)}
+.area-btn:hover{border-color:var(--primary);background:var(--primary-light)}
+.area-btn.active{border-color:var(--primary);background:var(--primary);color:#fff}
+
+.filter-section{padding:10px 14px;border-bottom:1px solid var(--border)}
+.filter-section h3{font-size:12px;color:var(--text-light);margin-bottom:8px;font-weight:500}
+.category-filters{display:flex;flex-wrap:wrap;gap:6px}
+.category-btn{padding:6px 12px;border:2px solid var(--border);border-radius:20px;background:#fff;cursor:pointer;font-size:12px;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:4px}
+.category-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary-dark);font-weight:500}
+.category-btn:hover{border-color:var(--primary)}
+
+.progress-bar{height:3px;background:var(--border);overflow:hidden}
+.progress-bar-inner{height:100%;background:var(--primary);transition:width .3s;width:0%}
+
+.facility-list{flex:1;overflow-y:auto;padding:8px}
+.facility-list::-webkit-scrollbar{width:6px}
+.facility-list::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+.facility-count{padding:6px 8px;font-size:12px;color:var(--text-light)}
+
+.facility-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.facility-card:hover{border-color:var(--primary);box-shadow:0 2px 8px rgba(255,107,53,.15);transform:translateY(-1px)}
+.facility-card.selected{border-color:var(--primary);background:var(--primary-light)}
+.facility-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.facility-name{font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;flex:1;min-width:0;word-break:break-word}
+.facility-category-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.facility-address{font-size:12px;color:var(--text-light);margin-bottom:6px;word-break:break-word}
+.facility-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.facility-tag{font-size:10px;padding:2px 7px;border-radius:8px}
+.facility-tag.green{background:#E8F5E9;color:#2E7D32}
+.facility-tag.blue{background:#E3F2FD;color:#1565C0}
+.facility-tag.gray{background:#F0F0F0;color:#555}
+
+.map-container{flex:1;position:relative}
+#map{width:100%;height:100%}
+
+.map-btn{position:absolute;z-index:500;background:#fff;border:none;border-radius:8px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;transition:all .2s}
+.map-btn:hover{background:var(--primary-light)}
+.locate-btn{bottom:30px;right:16px;border-radius:50%;width:44px;height:44px;font-size:20px;display:flex;align-items:center;justify-content:center}
+.search-area-btn{top:16px;left:50%;transform:translateX(-50%);padding:10px 20px;font-size:14px;font-weight:500;color:var(--primary-dark);border:2px solid var(--primary);display:none;align-items:center;gap:6px}
+.search-area-btn.visible{display:flex}
+.search-area-btn:hover{background:var(--primary);color:#fff}
+
+.loading-inline{display:flex;align-items:center;gap:8px;padding:16px;color:var(--text-light);font-size:13px}
+.mini-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.leaflet-popup-content-wrapper{border-radius:var(--radius)!important;box-shadow:var(--shadow)!important;padding:0!important}
+.leaflet-popup-content{margin:0!important;min-width:260px;max-width:320px}
+.popup-content{padding:16px}
+.popup-content h3{font-size:15px;font-weight:700;margin-bottom:4px;word-break:break-word}
+.popup-category{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;margin-bottom:8px}
+.popup-address{font-size:12px;color:var(--text-light);margin-bottom:8px}
+.popup-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.popup-tag{font-size:10px;padding:3px 8px;border-radius:8px}
+.popup-tag.green{background:#E8F5E9;color:#2E7D32}
+.popup-tag.blue{background:#E3F2FD;color:#1565C0}
+.popup-detail{font-size:12px;line-height:1.6;margin-bottom:6px}
+.popup-links{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.popup-links a{padding:6px 14px;background:var(--primary);color:#fff;text-decoration:none;border-radius:6px;font-size:12px}
+.popup-links a:hover{background:var(--primary-dark)}
+.popup-links a.secondary{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+
+.no-results{text-align:center;padding:40px 20px;color:var(--text-light)}
+.no-results .icon{font-size:48px;margin-bottom:12px}
+.no-results p{font-size:14px;line-height:1.6}
+
+.osm-badge{font-size:10px;color:var(--text-light);padding:6px 8px;border-top:1px solid var(--border);text-align:center}
+.osm-badge a{color:var(--primary);text-decoration:none}
+
+@media(max-width:768px){
+  .sidebar{position:absolute;top:0;left:0;height:100%;z-index:600;width:100%;max-width:380px}
+  .sidebar.collapsed{transform:translateX(-100%)}
+  .sidebar-toggle{display:block}
+  .header-stats{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">
+    <span class="logo-icon">🐾</span>
+    <div><h1>わんマップ</h1><span class="subtitle">ペット同伴可能施設マップ</span></div>
+  </div>
+  <div class="header-stats">
+    <span id="totalCount">施設数: --</span>
+    <span id="visibleCount">表示中: --</span>
+  </div>
+</header>
+
+<div class="main-container">
+  <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+  <aside class="sidebar" id="sidebar">
+    <div class="search-section">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="地名で検索（例: 渋谷、大阪）" />
+        <button onclick="searchLocation()">検索</button>
+      </div>
+    </div>
+    <div class="area-section">
+      <h3>エリアから探す</h3>
+      <div class="area-buttons" id="areaButtons"></div>
+    </div>
+    <div class="filter-section">
+      <h3>カテゴリで絞り込み</h3>
+      <div class="category-filters" id="categoryFilters"></div>
+    </div>
+    <div class="progress-bar" id="progressBar" style="display:none"><div class="progress-bar-inner" id="progressInner"></div></div>
+    <div class="facility-count" id="facilityCount">エリアを選択して施設を検索</div>
+    <div class="facility-list" id="facilityList"></div>
+    <div class="osm-badge">データ提供: <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a> contributors</div>
+  </aside>
+  <div class="map-container">
+    <div id="map"></div>
+    <button class="map-btn search-area-btn" id="searchAreaBtn" onclick="searchThisArea()">🔍 このエリアを検索</button>
+    <button class="map-btn locate-btn" onclick="locateUser()" title="現在地を表示">📍</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ========== Config ==========
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+const CATEGORIES = {
+  dogpark:  { name: 'ドッグラン',     icon: '🐕', color: '#43A047' },
+  park:     { name: '公園',           icon: '🌳', color: '#66BB6A' },
+  cafe:     { name: 'カフェ・飲食店', icon: '🍽️', color: '#E53935' },
+  hotel:    { name: 'ホテル・宿泊',   icon: '🏨', color: '#8E24AA' },
+  vet:      { name: '動物病院',       icon: '🏥', color: '#1E88E5' },
+  petshop:  { name: 'ペットショップ', icon: '🛍️', color: '#FB8C00' },
+  grooming: { name: 'トリミング',     icon: '✂️', color: '#F06292' },
+  other:    { name: 'その他ペット可', icon: '🐾', color: '#00ACC1' },
+};
+
+const AREAS = [
+  { name: '札幌',   lat: 43.062, lng: 141.354 },
+  { name: '仙台',   lat: 38.268, lng: 140.869 },
+  { name: '東京',   lat: 35.681, lng: 139.767 },
+  { name: '横浜',   lat: 35.444, lng: 139.638 },
+  { name: '名古屋', lat: 35.181, lng: 136.907 },
+  { name: '京都',   lat: 35.012, lng: 135.768 },
+  { name: '大阪',   lat: 34.694, lng: 135.502 },
+  { name: '神戸',   lat: 34.690, lng: 135.196 },
+  { name: '広島',   lat: 34.385, lng: 132.455 },
+  { name: '福岡',   lat: 33.590, lng: 130.402 },
+  { name: '沖縄',   lat: 26.334, lng: 127.806 },
+  { name: '軽井沢', lat: 36.348, lng: 138.636 },
+  { name: '湘南',   lat: 35.311, lng: 139.487 },
+  { name: '箱根',   lat: 35.233, lng: 139.107 },
+  { name: '那須',   lat: 37.018, lng: 139.966 },
+];
+
+// ========== State ==========
+let map, markerCluster;
+let allFacilities = [];
+let filteredFacilities = [];
+let markerMap = {};
+let activeCategories = new Set(Object.keys(CATEGORIES));
+let selectedId = null;
+let isLoading = false;
+let lastSearchCenter = null;
+
+// ========== Init ==========
+function init() {
+  map = L.map('map', { center: [35.681, 139.767], zoom: 14 });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  markerCluster = L.markerClusterGroup({
+    maxClusterRadius: 50, showCoverageOnHover: false,
+    iconCreateFunction(cluster) {
+      const n = cluster.getChildCount();
+      const sz = n > 30 ? 52 : n > 10 ? 44 : 36;
+      return L.divIcon({
+        html: `<div style="background:linear-gradient(135deg,#FF6B35,#E55A2B);color:#fff;width:${sz}px;height:${sz}px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${sz<40?13:15}px;box-shadow:0 2px 8px rgba(0,0,0,.3);border:3px solid #fff">${n}</div>`,
+        className: '', iconSize: [sz, sz],
+      });
+    },
+  });
+  map.addLayer(markerCluster);
+
+  map.on('moveend', () => {
+    const btn = document.getElementById('searchAreaBtn');
+    if (map.getZoom() >= 12) {
+      const c = map.getCenter();
+      if (!lastSearchCenter || map.distance(lastSearchCenter, c) > 500) {
+        btn.classList.add('visible');
+      }
+    } else {
+      btn.classList.remove('visible');
+    }
+  });
+
+  initAreaButtons();
+  initFilters();
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') searchLocation(); });
+
+  goToArea('東京', 35.681, 139.767);
+}
+
+// ========== Area ==========
+function initAreaButtons() {
+  const c = document.getElementById('areaButtons');
+  AREAS.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'area-btn';
+    btn.textContent = a.name;
+    btn.onclick = () => goToArea(a.name, a.lat, a.lng);
+    c.appendChild(btn);
+  });
+}
+
+function goToArea(name, lat, lng) {
+  document.querySelectorAll('.area-btn').forEach(b => b.classList.toggle('active', b.textContent === name));
+  map.setView([lat, lng], 14);
+  setTimeout(() => searchThisArea(), 300);
+}
+
+// ========== Overpass ==========
+function buildQuery(bounds) {
+  const s = bounds.getSouth().toFixed(5), w = bounds.getWest().toFixed(5);
+  const n = bounds.getNorth().toFixed(5), e = bounds.getEast().toFixed(5);
+  const bb = `${s},${w},${n},${e}`;
+  return `[out:json][timeout:15];(node["leisure"="dog_park"](${bb});way["leisure"="dog_park"](${bb});node["amenity"="veterinary"](${bb});node["shop"="pet"](${bb});node["shop"="pet_grooming"](${bb});node["dog"~"^(yes|allowed|leashed|designated|unleashed|only)$"](${bb});node["pets"~"^(yes|allowed|welcome)$"](${bb});way["leisure"="park"]["name"](${bb}););out center tags 300;`;
+}
+
+async function fetchOverpass(query) {
+  const encoded = encodeURIComponent(query);
+  for (const ep of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(`${ep}?data=${encoded}`);
+      if (res.ok) return await res.json();
+      console.warn(`${ep}: ${res.status}`);
+    } catch (e) { console.warn(`${ep}:`, e.message); }
+  }
+  throw new Error('Overpass API に接続できませんでした');
+}
+
+function classify(tags) {
+  if (tags.leisure === 'dog_park') return 'dogpark';
+  if (tags.amenity === 'veterinary') return 'vet';
+  if (tags.shop === 'pet') return 'petshop';
+  if (tags.shop === 'pet_grooming') return 'grooming';
+  if (tags.leisure === 'park') return 'park';
+  if (tags.tourism && /hotel|hostel|motel|guest_house|camp_site/.test(tags.tourism)) return 'hotel';
+  if (tags.amenity && /cafe|restaurant|fast_food|bar|pub/.test(tags.amenity)) return 'cafe';
+  return 'other';
+}
+
+function parse(data) {
+  const seen = new Set(), out = [];
+  for (const el of data.elements) {
+    const t = el.tags || {};
+    const name = t.name || t['name:ja'] || t['name:en'];
+    if (!name) continue;
+    const lat = el.lat || el.center?.lat, lng = el.lon || el.center?.lon;
+    if (!lat || !lng) continue;
+    const key = `${name}_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const petTags = [];
+    if (t.dog) petTags.push(`dog=${t.dog}`);
+    if (t.pets) petTags.push(`pets=${t.pets}`);
+    if (t.leisure === 'dog_park') petTags.push('ドッグラン');
+    if (t.outdoor_seating === 'yes') petTags.push('テラス席');
+    if (t.dog === 'leashed') petTags.push('リード着用');
+    if (t.fee === 'no') petTags.push('無料');
+
+    const addr = [t['addr:province']||t['addr:state']||'', t['addr:city']||'', t['addr:district']||t['addr:quarter']||'', t['addr:street']||'', t['addr:housenumber']||''].filter(Boolean).join(' ') || t['addr:full'] || '';
+
+    out.push({
+      id: el.id, name, category: classify(t), lat, lng, address: addr, petTags,
+      cuisine: t.cuisine ? t.cuisine.replace(/;/g,', ') : '',
+      website: t.website || t['contact:website'] || '',
+      phone: t.phone || t['contact:phone'] || '',
+      hours: t.opening_hours || '',
+      wheelchair: t.wheelchair || '',
+    });
+  }
+  // ペット明示タグ付きを先に
+  out.sort((a,b) => b.petTags.length - a.petTags.length || a.name.localeCompare(b.name,'ja'));
+  return out;
+}
+
+// ========== Search ==========
+async function searchThisArea() {
+  if (isLoading) return;
+  isLoading = true;
+
+  document.getElementById('searchAreaBtn').classList.remove('visible');
+  lastSearchCenter = map.getCenter();
+
+  const pb = document.getElementById('progressBar'), pi = document.getElementById('progressInner');
+  pb.style.display = 'block'; pi.style.width = '10%';
+  document.getElementById('facilityCount').textContent = '';
+  document.getElementById('facilityList').innerHTML = '<div class="loading-inline"><div class="mini-spinner"></div>施設データを取得中...</div>';
+
+  const t0 = performance.now();
+  try {
+    pi.style.width = '30%';
+    const data = await fetchOverpass(buildQuery(map.getBounds()));
+    pi.style.width = '70%';
+    allFacilities = parse(data);
+    pi.style.width = '100%';
+    applyFilters();
+    const sec = ((performance.now() - t0) / 1000).toFixed(1);
+    document.getElementById('facilityCount').textContent += ` (${sec}秒)`;
+  } catch (e) {
+    console.error(e);
+    document.getElementById('facilityList').innerHTML = `<div class="no-results"><div class="icon">⚠️</div><p>データ取得に失敗しました。<br>しばらく待ってから再度お試しください。</p></div>`;
+    document.getElementById('facilityCount').textContent = 'エラー';
+  }
+  setTimeout(() => { pb.style.display = 'none'; }, 500);
+  isLoading = false;
+}
+
+async function searchLocation() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+
+  document.getElementById('facilityList').innerHTML = '<div class="loading-inline"><div class="mini-spinner"></div>場所を検索中...</div>';
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=jp&limit=1&accept-language=ja`);
+    const results = await res.json();
+    if (results.length > 0) {
+      const { lat, lon } = results[0];
+      document.querySelectorAll('.area-btn').forEach(b => b.classList.remove('active'));
+      map.setView([parseFloat(lat), parseFloat(lon)], 14);
+      setTimeout(() => searchThisArea(), 300);
+    } else {
+      document.getElementById('facilityList').innerHTML = '<div class="no-results"><div class="icon">🔍</div><p>場所が見つかりませんでした。<br>別のキーワードで試すか、<br>エリアボタンをお使いください。</p></div>';
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById('facilityList').innerHTML = '<div class="no-results"><div class="icon">⚠️</div><p>検索に失敗しました。</p></div>';
+  }
+}
+
+// ========== Filters ==========
+function initFilters() {
+  const c = document.getElementById('categoryFilters');
+  const allBtn = document.createElement('button');
+  allBtn.className = 'category-btn active';
+  allBtn.innerHTML = '📋 すべて';
+  allBtn.dataset.category = 'all';
+  allBtn.onclick = () => {
+    activeCategories = activeCategories.size === Object.keys(CATEGORIES).length ? new Set() : new Set(Object.keys(CATEGORIES));
+    updateCatBtns(); applyFilters();
+  };
+  c.appendChild(allBtn);
+  Object.entries(CATEGORIES).forEach(([k, v]) => {
+    const btn = document.createElement('button');
+    btn.className = 'category-btn active';
+    btn.innerHTML = `<span style="font-size:14px">${v.icon}</span> ${v.name}`;
+    btn.dataset.category = k;
+    btn.onclick = () => { activeCategories.has(k) ? activeCategories.delete(k) : activeCategories.add(k); updateCatBtns(); applyFilters(); };
+    c.appendChild(btn);
+  });
+}
+function updateCatBtns() {
+  document.querySelectorAll('.category-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.category === 'all' ? activeCategories.size === Object.keys(CATEGORIES).length : activeCategories.has(b.dataset.category));
+  });
+}
+function applyFilters() {
+  filteredFacilities = allFacilities.filter(f => activeCategories.has(f.category));
+  renderMarkers(filteredFacilities);
+  renderList(filteredFacilities);
+  updateStats();
+}
+
+// ========== Markers ==========
+function mkIcon(cat) {
+  const c = CATEGORIES[cat] || CATEGORIES.other;
+  return L.divIcon({
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${c.color};box-shadow:0 2px 6px rgba(0,0,0,.3)"><span style="transform:rotate(45deg);font-size:16px">${c.icon}</span></div>`,
+    className: '', iconSize: [36,36], iconAnchor: [18,36], popupAnchor: [0,-36],
+  });
+}
+
+function renderMarkers(facilities) {
+  markerCluster.clearLayers();
+  markerMap = {};
+  facilities.forEach(f => {
+    const m = L.marker([f.lat, f.lng], { icon: mkIcon(f.category) });
+    m.bindPopup(() => popupHtml(f), { maxWidth: 320 });
+    m.on('click', () => { selectedId = f.id; highlightCard(f.id); });
+    markerMap[f.id] = m;
+    markerCluster.addLayer(m);
+  });
+}
+
+function popupHtml(f) {
+  const c = CATEGORIES[f.category] || CATEGORIES.other;
+  let tags = f.petTags.map(t => `<span class="popup-tag green">${esc(t)}</span>`).join('');
+  if (f.cuisine) tags += `<span class="popup-tag blue">${esc(f.cuisine)}</span>`;
+  if (f.wheelchair === 'yes') tags += `<span class="popup-tag blue">♿ バリアフリー</span>`;
+  let links = '';
+  if (f.website) links += `<a href="${esc(f.website)}" target="_blank" rel="noopener">公式サイト</a>`;
+  if (f.phone) links += `<a href="tel:${esc(f.phone)}" class="secondary">📞 ${esc(f.phone)}</a>`;
+
+  return `<div class="popup-content">
+    <h3>${c.icon} ${esc(f.name)}</h3>
+    <span class="popup-category" style="background:${c.color}20;color:${c.color}">${c.name}</span>
+    ${f.address ? `<div class="popup-address">📍 ${esc(f.address)}</div>` : ''}
+    ${tags ? `<div class="popup-tags">${tags}</div>` : ''}
+    ${f.hours ? `<div class="popup-detail">🕐 ${esc(f.hours)}</div>` : ''}
+    ${links ? `<div class="popup-links">${links}</div>` : ''}
+  </div>`;
+}
+
+// ========== List ==========
+function renderList(facilities) {
+  const list = document.getElementById('facilityList');
+  document.getElementById('facilityCount').textContent = `${facilities.length}件の施設`;
+  if (!facilities.length) {
+    list.innerHTML = '<div class="no-results"><div class="icon">🔍</div><p>施設が見つかりません。<br>フィルターを変更するか、<br>別のエリアで検索してください。</p></div>';
+    return;
+  }
+  list.innerHTML = facilities.map(f => {
+    const c = CATEGORIES[f.category] || CATEGORIES.other;
+    let tags = f.petTags.slice(0,3).map(t => `<span class="facility-tag green">${esc(t)}</span>`).join('');
+    if (f.cuisine) tags += `<span class="facility-tag blue">${esc(f.cuisine)}</span>`;
+    return `<div class="facility-card${f.id===selectedId?' selected':''}" data-id="${f.id}" onclick="selectFacility(${f.id})">
+      <div class="facility-card-header">
+        <div class="facility-name">${c.icon} ${esc(f.name)}</div>
+        <span class="facility-category-badge" style="background:${c.color}20;color:${c.color}">${c.name}</span>
+      </div>
+      ${f.address ? `<div class="facility-address">📍 ${esc(f.address)}</div>` : ''}
+      ${tags ? `<div class="facility-tags">${tags}</div>` : ''}
+      ${f.hours ? `<div style="font-size:11px;color:var(--text-light)">🕐 ${esc(f.hours)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function selectFacility(id) {
+  selectedId = id;
+  const f = allFacilities.find(x => x.id === id);
+  if (!f) return;
+  map.setView([f.lat, f.lng], Math.max(map.getZoom(), 16));
+  const m = markerMap[id];
+  if (m) markerCluster.zoomToShowLayer(m, () => m.openPopup());
+  highlightCard(id);
+}
+
+function highlightCard(id) {
+  document.querySelectorAll('.facility-card').forEach(c => c.classList.toggle('selected', +c.dataset.id === id));
+  const card = document.querySelector(`.facility-card[data-id="${id}"]`);
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ========== Location ==========
+function locateUser() {
+  if (!navigator.geolocation) { alert('位置情報が利用できません。'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    map.setView([lat, lng], 15);
+    L.circle([lat, lng], { radius: 30, color: '#4285F4', fillColor: '#4285F4', fillOpacity: .3, weight: 2 }).addTo(map);
+    L.marker([lat, lng], { icon: L.divIcon({ html: '<div style="width:16px;height:16px;background:#4285F4;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>', className: '', iconSize: [16,16], iconAnchor: [8,8] }) }).addTo(map);
+    document.querySelectorAll('.area-btn').forEach(b => b.classList.remove('active'));
+    setTimeout(() => searchThisArea(), 400);
+  }, () => alert('位置情報の取得に失敗しました。'), { enableHighAccuracy: true });
+}
+
+// ========== Utils ==========
+function updateStats() {
+  document.getElementById('totalCount').textContent = `取得済: ${allFacilities.length}`;
+  document.getElementById('visibleCount').textContent = `表示中: ${filteredFacilities.length}`;
+}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
